@@ -159,6 +159,7 @@ impl Mul for MultiVec3 {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
