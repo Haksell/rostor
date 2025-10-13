@@ -1,4 +1,4 @@
-use std::ops::{BitXor, Mul};
+use std::ops::{Add, BitXor, Div, Mul, Sub};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec3 {
@@ -12,6 +12,31 @@ impl Vec3 {
 
     pub const fn new(e1: f64, e2: f64, e3: f64) -> Self {
         Self { e1, e2, e3 }
+    }
+
+    pub fn dot(self, rhs: Self) -> f64 {
+        self.e1 * rhs.e1 + self.e2 * rhs.e2 + self.e3 * rhs.e3
+    }
+
+    pub fn inverse(self) -> Self {
+        debug_assert!(!self.is_zero());
+        self / self.length_squared()
+    }
+
+    pub fn length_squared(self) -> f64 {
+        self.dot(self)
+    }
+
+    pub fn length(self) -> f64 {
+        self.length_squared().sqrt()
+    }
+
+    pub fn is_close(self, rhs: Self) -> bool {
+        (self - rhs).length_squared() < 1e-10
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.e1 == 0.0 && self.e2 == 0.0 && self.e3 == 0.0
     }
 }
 
@@ -84,13 +109,39 @@ impl BitXor for Vec3 {
     }
 }
 
-impl Vec3 {
-    fn dot(self, rhs: Self) -> f64 {
-        self.e1 * rhs.e1 + self.e2 * rhs.e2 + self.e3 * rhs.e3
+impl Mul<f64> for Vec3 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Vec3::new(self.e1 * rhs, self.e2 * rhs, self.e3 * rhs)
     }
 }
 
-impl Mul for Vec3 {
+impl Div<f64> for Vec3 {
+    type Output = Vec3;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        Vec3::new(self.e1 / rhs, self.e2 / rhs, self.e3 / rhs)
+    }
+}
+
+impl Add<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3::new(self.e1 + rhs.e1, self.e2 + rhs.e2, self.e3 + rhs.e3)
+    }
+}
+
+impl Sub<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3::new(self.e1 - rhs.e1, self.e2 - rhs.e2, self.e3 - rhs.e3)
+    }
+}
+
+impl Mul<Vec3> for Vec3 {
     type Output = MultiVec3;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -98,7 +149,7 @@ impl Mul for Vec3 {
     }
 }
 
-impl Mul for MultiVec3 {
+impl Mul<MultiVec3> for MultiVec3 {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
@@ -169,6 +220,20 @@ mod tests {
         assert_eq!(
             Vec3::new(1.0, 0.0, 0.0) ^ Vec3::new(0.0, -2.0, 0.0),
             BiVec3::new(-2.0, 0.0, 0.0)
+        );
+
+        assert_eq!(
+            Vec3::new(1.0, 2.0, 3.0) ^ Vec3::new(1.0, 2.0, 3.0),
+            BiVec3::ZERO
+        );
+    }
+
+    #[test]
+    fn inverse() {
+        assert!(
+            Vec3::new(6.0, 8.0, 0.0)
+                .inverse()
+                .is_close(Vec3::new(0.06, 0.08, 0.0))
         );
 
         assert_eq!(
