@@ -1,4 +1,4 @@
-use std::ops::{Add, BitXor, Div, Mul, Sub};
+use std::ops::{Add, BitXor, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec3 {
@@ -37,6 +37,23 @@ impl Vec3 {
 
     pub fn is_zero(self) -> bool {
         self.e1 == 0.0 && self.e2 == 0.0 && self.e3 == 0.0
+    }
+
+    pub fn reflect(self, axis: Self) -> Self {
+        // Derived from ava⁻¹ (self * axis * self.inverse())
+        // https://jacquesheunis.com/post/rotors/#reflections-with-the-geometric-product
+        let (a1, a2, a3) = axis.into();
+        let (v1, v2, v3) = self.into();
+        let p1 = a1 * a1 * v1 - a2 * a2 * v1 - a3 * a3 * v1 + 2. * a1 * a2 * v2 + 2. * a3 * a1 * v3;
+        let p2 = a2 * a2 * v2 - a3 * a3 * v2 - a1 * a1 * v2 + 2. * a2 * a3 * v3 + 2. * a1 * a2 * v1;
+        let p3 = a3 * a3 * v3 - a1 * a1 * v3 - a2 * a2 * v3 + 2. * a3 * a1 * v1 + 2. * a2 * a3 * v2;
+        Self::new(p1, p2, p3) / axis.length_squared()
+    }
+}
+
+impl From<Vec3> for (f64, f64, f64) {
+    fn from(v: Vec3) -> Self {
+        (v.e1, v.e2, v.e3)
     }
 }
 
@@ -109,11 +126,27 @@ impl BitXor for Vec3 {
     }
 }
 
+impl Neg for Vec3 {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Vec3::new(-self.e1, -self.e2, -self.e3)
+    }
+}
+
 impl Mul<f64> for Vec3 {
     type Output = Vec3;
 
     fn mul(self, rhs: f64) -> Self::Output {
         Vec3::new(self.e1 * rhs, self.e2 * rhs, self.e3 * rhs)
+    }
+}
+
+impl Mul<Vec3> for f64 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        rhs * self
     }
 }
 
@@ -239,6 +272,18 @@ mod tests {
         assert_eq!(
             Vec3::new(1.0, 2.0, 3.0) ^ Vec3::new(1.0, 2.0, 3.0),
             BiVec3::ZERO
+        );
+    }
+
+    #[test]
+    fn reflect() {
+        assert_eq!(
+            Vec3::new(0.0, 2.0, 0.0).reflect(Vec3::new(5.0, 0.0, 0.0)),
+            Vec3::new(0.0, -2.0, 0.0)
+        );
+        assert_eq!(
+            Vec3::new(0.0, 2.0, 0.0).reflect(Vec3::new(1.0, 1.0, 0.0)),
+            Vec3::new(2.0, 0.0, 0.0)
         );
     }
 }
