@@ -43,7 +43,7 @@ impl Vec3 {
         self.e1 == 0.0 && self.e2 == 0.0 && self.e3 == 0.0
     }
 
-    pub fn reflect(self, axis: Self) -> Self {
+    pub fn reflected_by(self, axis: Self) -> Self {
         // Derived from ava⁻¹ (self * axis * self.inverse())
         // https://jacquesheunis.com/post/rotors/#reflections-with-the-geometric-product
         let (a1, a2, a3) = axis.into();
@@ -86,6 +86,48 @@ impl TriVec3 {
 
     pub const fn new(e123: f64) -> Self {
         Self { e123 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Rotor3 {
+    e: f64,
+    e12: f64,
+    e23: f64,
+    e31: f64,
+}
+
+impl Rotor3 {
+    pub const ZERO: Self = Self::new(0.0, BiVec3::ZERO);
+
+    pub const fn new(scalar: f64, bivec3: BiVec3) -> Self {
+        Self {
+            e: scalar,
+            e12: bivec3.e12,
+            e23: bivec3.e23,
+            e31: bivec3.e31,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DualRotor3 {
+    e1: f64,
+    e2: f64,
+    e3: f64,
+    e123: f64,
+}
+
+impl DualRotor3 {
+    pub const ZERO: Self = Self::new(Vec3::ZERO, TriVec3::ZERO);
+
+    pub const fn new(vec3: Vec3, trivec3: TriVec3) -> Self {
+        Self {
+            e1: vec3.e1,
+            e2: vec3.e2,
+            e3: vec3.e3,
+            e123: trivec3.e123,
+        }
     }
 }
 
@@ -142,7 +184,7 @@ impl Mul<f64> for Vec3 {
     type Output = Vec3;
 
     fn mul(self, rhs: f64) -> Self::Output {
-        Vec3::new(self.e1 * rhs, self.e2 * rhs, self.e3 * rhs)
+        Self::Output::new(self.e1 * rhs, self.e2 * rhs, self.e3 * rhs)
     }
 }
 
@@ -158,7 +200,7 @@ impl Div<f64> for Vec3 {
     type Output = Vec3;
 
     fn div(self, rhs: f64) -> Self::Output {
-        Vec3::new(self.e1 / rhs, self.e2 / rhs, self.e3 / rhs)
+        Self::Output::new(self.e1 / rhs, self.e2 / rhs, self.e3 / rhs)
     }
 }
 
@@ -166,7 +208,7 @@ impl Add<Vec3> for Vec3 {
     type Output = Vec3;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Vec3::new(self.e1 + rhs.e1, self.e2 + rhs.e2, self.e3 + rhs.e3)
+        Self::Output::new(self.e1 + rhs.e1, self.e2 + rhs.e2, self.e3 + rhs.e3)
     }
 }
 
@@ -174,15 +216,41 @@ impl Sub<Vec3> for Vec3 {
     type Output = Vec3;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec3::new(self.e1 - rhs.e1, self.e2 - rhs.e2, self.e3 - rhs.e3)
+        Self::Output::new(self.e1 - rhs.e1, self.e2 - rhs.e2, self.e3 - rhs.e3)
     }
 }
 
 impl Mul<Vec3> for Vec3 {
-    type Output = MultiVec3;
+    type Output = Rotor3;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        MultiVec3::new(self.dot(rhs), Vec3::ZERO, self ^ rhs, TriVec3::ZERO)
+        Self::Output::new(self.dot(rhs), self ^ rhs)
+    }
+}
+
+impl Mul<Vec3> for Rotor3 {
+    type Output = DualRotor3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        Self::Output {
+            e1: self.e * rhs.e1 + self.e12 * rhs.e2 - self.e31 * rhs.e3,
+            e2: self.e * rhs.e2 + self.e23 * rhs.e3 - self.e12 * rhs.e1,
+            e3: self.e * rhs.e3 + self.e31 * rhs.e1 - self.e23 * rhs.e2,
+            e123: self.e12 * rhs.e3 + self.e23 * rhs.e1 + self.e31 * rhs.e2,
+        }
+    }
+}
+
+impl Mul<Vec3> for DualRotor3 {
+    type Output = Rotor3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        Self::Output {
+            e: self.e1 * rhs.e1 + self.e2 * rhs.e2 + self.e3 * rhs.e3,
+            e12: self.e1 * rhs.e2 - self.e2 * rhs.e1 + self.e123 * rhs.e3,
+            e23: self.e2 * rhs.e3 - self.e3 * rhs.e2 + self.e123 * rhs.e1,
+            e31: -self.e1 * rhs.e3 + self.e3 * rhs.e1 + self.e123 * rhs.e2,
+        }
     }
 }
 
@@ -265,6 +333,18 @@ impl Mul<Vec3> for MultiVec3 {
     }
 }
 
+impl TryFrom<DualRotor3> for Vec3 {
+    type Error = ();
+
+    fn try_from(m: DualRotor3) -> Result<Self, Self::Error> {
+        if m.e123.abs() < EPS {
+            Ok(Vec3::new(m.e1, m.e2, m.e3))
+        } else {
+            Err(())
+        }
+    }
+}
+
 impl TryFrom<MultiVec3> for Vec3 {
     type Error = ();
 
@@ -316,11 +396,11 @@ mod tests {
     #[test]
     fn reflect() {
         assert_eq!(
-            Vec3::new(0.0, 2.0, 0.0).reflect(Vec3::new(5.0, 0.0, 0.0)),
+            Vec3::new(0.0, 2.0, 0.0).reflected_by(Vec3::new(5.0, 0.0, 0.0)),
             Vec3::new(0.0, -2.0, 0.0)
         );
         assert_eq!(
-            Vec3::new(0.0, 2.0, 0.0).reflect(Vec3::new(1.0, 1.0, 0.0)),
+            Vec3::new(0.0, 2.0, 0.0).reflected_by(Vec3::new(1.0, 1.0, 0.0)),
             Vec3::new(2.0, 0.0, 0.0)
         );
     }
@@ -338,15 +418,15 @@ mod tests {
         let (sin_c, cos_c) = (TAU * 10. / 24.).sin_cos();
         let c = Vec3::new(cos_c, sin_c, 1.);
 
-        let r = b * a;
+        let rot = b * a;
 
-        dbg!(r * v);
-        dbg!(r * v * a.inverse());
+        dbg!(rot * v);
+        dbg!(rot * v * a.inverse());
+        dbg!(rot * v * a.inverse() * b.inverse());
+        dbg!(c);
 
-        assert!(
-            TryInto::<Vec3>::try_into(r * v * a.inverse() * b.inverse())
-                .unwrap()
-                .is_close(c)
-        );
+        let res: Vec3 = TryFrom::try_from(rot * v * a.inverse() * b.inverse()).unwrap();
+
+        assert!(res.is_close(c));
     }
 }
