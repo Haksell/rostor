@@ -1,5 +1,7 @@
 use std::ops::{Add, BitXor, Div, Mul, Neg, Sub};
 
+const EPS: f64 = 1e-7;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec3 {
     e1: f64,
@@ -32,7 +34,9 @@ impl Vec3 {
     }
 
     pub fn is_close(self, rhs: Self) -> bool {
-        (self - rhs).length_squared() < 1e-10
+        (self.e1 - rhs.e1).abs() < EPS
+            && (self.e2 - rhs.e2).abs() < EPS
+            && (self.e3 - rhs.e3).abs() < EPS
     }
 
     pub fn is_zero(self) -> bool {
@@ -244,9 +248,43 @@ impl Mul<MultiVec3> for MultiVec3 {
     }
 }
 
+impl Mul<Vec3> for MultiVec3 {
+    type Output = Self;
+
+    fn mul(self, rhs: Vec3) -> Self {
+        Self {
+            e: self.e1 * rhs.e1 + self.e2 * rhs.e2 + self.e3 * rhs.e3,
+            e1: self.e * rhs.e1 + self.e12 * rhs.e2 - self.e31 * rhs.e3,
+            e2: self.e * rhs.e2 - self.e12 * rhs.e1 + self.e23 * rhs.e3,
+            e3: self.e * rhs.e3 - self.e23 * rhs.e2 + self.e31 * rhs.e1,
+            e12: self.e1 * rhs.e2 - self.e2 * rhs.e1 + self.e123 * rhs.e3,
+            e23: self.e2 * rhs.e3 - self.e3 * rhs.e2 + self.e123 * rhs.e1,
+            e31: -self.e1 * rhs.e3 + self.e3 * rhs.e1 + self.e123 * rhs.e2,
+            e123: self.e23 * rhs.e1 + self.e31 * rhs.e2 + self.e12 * rhs.e3,
+        }
+    }
+}
+
+impl TryFrom<MultiVec3> for Vec3 {
+    type Error = ();
+
+    fn try_from(m: MultiVec3) -> Result<Self, Self::Error> {
+        if m.e.abs() < EPS
+            && m.e12.abs() < EPS
+            && m.e23.abs() < EPS
+            && m.e31.abs() < EPS
+            && m.e123.abs() < EPS
+        {
+            Ok(Vec3::new(m.e1, m.e2, m.e3))
+        } else {
+            Err(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, std::f64::consts::TAU};
 
     #[test]
     fn wedge_product() {
@@ -284,6 +322,31 @@ mod tests {
         assert_eq!(
             Vec3::new(0.0, 2.0, 0.0).reflect(Vec3::new(1.0, 1.0, 0.0)),
             Vec3::new(2.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn rotation() {
+        let v = Vec3::new(1., 0., 1.);
+
+        let (sin_a, cos_a) = (TAU * 2. / 24.).sin_cos();
+        let a = Vec3::new(cos_a, sin_a, 0.);
+
+        let (sin_b, cos_b) = (TAU * 7. / 24.).sin_cos();
+        let b = Vec3::new(cos_b, sin_b, 0.);
+
+        let (sin_c, cos_c) = (TAU * 10. / 24.).sin_cos();
+        let c = Vec3::new(cos_c, sin_c, 1.);
+
+        let r = b * a;
+
+        dbg!(r * v);
+        dbg!(r * v * a.inverse());
+
+        assert!(
+            TryInto::<Vec3>::try_into(r * v * a.inverse() * b.inverse())
+                .unwrap()
+                .is_close(c)
         );
     }
 }
