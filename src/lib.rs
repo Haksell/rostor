@@ -100,6 +100,9 @@ pub struct Rotor3 {
 impl Rotor3 {
     pub const ZERO: Self = Self::new(0.0, BiVec3::ZERO);
 
+    // Any rotor with only a scalar component is an identity
+    pub const IDENTITY: Self = Self::new(1.0, BiVec3::ZERO);
+
     pub const fn new(scalar: f64, bivec3: BiVec3) -> Self {
         Self {
             e: scalar,
