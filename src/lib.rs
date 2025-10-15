@@ -53,6 +53,10 @@ impl Vec3 {
         let p3 = a3 * a3 * v3 - a1 * a1 * v3 - a2 * a2 * v3 + 2. * a3 * a1 * v1 + 2. * a2 * a3 * v2;
         Self::new(p1, p2, p3) / axis.length_squared()
     }
+
+    fn normalized(self) -> Self {
+        self / self.length()
+    }
 }
 
 impl From<Vec3> for (f64, f64, f64) {
@@ -110,6 +114,14 @@ impl Rotor3 {
             e23: bivec3.e23,
             e31: bivec3.e31,
         }
+    }
+
+    // Doesn't work if from from ≈ to
+    pub fn from_to(from: Vec3, to: Vec3) -> Self {
+        let from = from.normalized();
+        let to = to.normalized();
+        let halfway = (from + to).normalized();
+        from * halfway
     }
 }
 
@@ -240,6 +252,19 @@ impl Mul<Vec3> for Rotor3 {
             e2: self.e * rhs.e2 + self.e23 * rhs.e3 - self.e12 * rhs.e1,
             e3: self.e * rhs.e3 + self.e31 * rhs.e1 - self.e23 * rhs.e2,
             e123: self.e12 * rhs.e3 + self.e23 * rhs.e1 + self.e31 * rhs.e2,
+        }
+    }
+}
+
+impl Mul<Rotor3> for Rotor3 {
+    type Output = Rotor3;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            e: self.e * rhs.e - self.e12 * rhs.e12 - self.e23 * rhs.e23 - self.e31 * rhs.e31,
+            e12: self.e * rhs.e12 + self.e12 * rhs.e - self.e23 * rhs.e31 + self.e31 * rhs.e23,
+            e23: self.e * rhs.e23 + self.e23 * rhs.e + self.e12 * rhs.e31 - self.e31 * rhs.e12,
+            e31: self.e * rhs.e31 + self.e31 * rhs.e - self.e12 * rhs.e23 + self.e23 * rhs.e12,
         }
     }
 }
