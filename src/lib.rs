@@ -16,7 +16,7 @@ impl Vec3 {
         Self { e1, e2, e3 }
     }
 
-    pub fn dot(self, rhs: Self) -> f64 {
+    pub const fn dot(self, rhs: Self) -> f64 {
         self.e1 * rhs.e1 + self.e2 * rhs.e2 + self.e3 * rhs.e3
     }
 
@@ -25,7 +25,7 @@ impl Vec3 {
         self / self.length_squared()
     }
 
-    pub fn length_squared(self) -> f64 {
+    pub const fn length_squared(self) -> f64 {
         self.dot(self)
     }
 
@@ -33,14 +33,18 @@ impl Vec3 {
         self.length_squared().sqrt()
     }
 
-    pub fn is_close(self, rhs: Self) -> bool {
+    pub const fn is_close(self, rhs: Self) -> bool {
         (self.e1 - rhs.e1).abs() < EPS
             && (self.e2 - rhs.e2).abs() < EPS
             && (self.e3 - rhs.e3).abs() < EPS
     }
 
-    pub fn is_zero(self) -> bool {
+    pub const fn is_zero(self) -> bool {
         self.e1 == 0.0 && self.e2 == 0.0 && self.e3 == 0.0
+    }
+
+    pub fn normalized(self) -> Self {
+        self / self.length()
     }
 
     pub fn reflected_by(self, axis: Self) -> Self {
@@ -54,8 +58,17 @@ impl Vec3 {
         Self::new(p1, p2, p3) / axis.length_squared()
     }
 
-    fn normalized(self) -> Self {
-        self / self.length()
+    pub fn rotated_by(self, from: Self, to: Self) -> Self {
+        let rotor = Rotor3::from_to(from, to);
+        let dr = rotor * self;
+        // rotor is normalized, so the inverse is the same as the reverse
+        let rr = rotor.reverse();
+        // DualRotor3 * Rotor3 multiplication, ignoring the e123 = 0 term
+        Self {
+            e1: dr.e1 * rr.e - dr.e2 * rr.e12 + dr.e3 * rr.e31 - dr.e123 * rr.e23,
+            e2: dr.e2 * rr.e + dr.e1 * rr.e12 - dr.e3 * rr.e23 - dr.e123 * rr.e31,
+            e3: dr.e3 * rr.e - dr.e1 * rr.e31 + dr.e2 * rr.e23 - dr.e123 * rr.e12,
+        }
     }
 }
 
@@ -116,13 +129,26 @@ impl Rotor3 {
         }
     }
 
-    // Doesn't work if from from ≈ to
+    // Doesn't work if from from ≈ -to
     pub fn from_to(from: Vec3, to: Vec3) -> Self {
         let from = from.normalized();
         let to = to.normalized();
         let halfway = (from + to).normalized();
-        from * halfway
+        halfway * from
     }
+
+    pub const fn reverse(self) -> Self {
+        Self {
+            e: self.e,
+            e12: -self.e12,
+            e23: -self.e23,
+            e31: -self.e31,
+        }
+    }
+
+    // TODO: implement nlerp and slerp
+    // https://jacquesheunis.com/post/rotors/
+    // #how-do-i-smoothly--correctly-interpolate-between-two-rotors
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -278,6 +304,19 @@ impl Mul<Vec3> for DualRotor3 {
             e12: self.e1 * rhs.e2 - self.e2 * rhs.e1 + self.e123 * rhs.e3,
             e23: self.e2 * rhs.e3 - self.e3 * rhs.e2 + self.e123 * rhs.e1,
             e31: -self.e1 * rhs.e3 + self.e3 * rhs.e1 + self.e123 * rhs.e2,
+        }
+    }
+}
+
+impl Mul<Rotor3> for DualRotor3 {
+    type Output = DualRotor3;
+
+    fn mul(self, rhs: Rotor3) -> Self::Output {
+        Self::Output {
+            e1: self.e1 * rhs.e - self.e2 * rhs.e12 + self.e3 * rhs.e31 - self.e123 * rhs.e23,
+            e2: self.e2 * rhs.e + self.e1 * rhs.e12 - self.e3 * rhs.e23 - self.e123 * rhs.e31,
+            e3: self.e3 * rhs.e - self.e1 * rhs.e31 + self.e2 * rhs.e23 - self.e123 * rhs.e12,
+            e123: self.e123 * rhs.e + self.e1 * rhs.e23 + self.e2 * rhs.e31 + self.e3 * rhs.e12,
         }
     }
 }
@@ -443,17 +482,13 @@ mod tests {
         let (sin_b, cos_b) = (TAU * 7. / 24.).sin_cos();
         let b = Vec3::new(cos_b, sin_b, 0.);
 
-        let (sin_c, cos_c) = (TAU * 10. / 24.).sin_cos();
+        let (sin_c, cos_c) = (TAU * 5. / 24.).sin_cos();
         let c = Vec3::new(cos_c, sin_c, 1.);
 
-        let rot = b * a;
+        let res = v.rotated_by(a, b);
 
-        dbg!(rot * v);
-        dbg!(rot * v * a.inverse());
-        dbg!(rot * v * a.inverse() * b.inverse());
-        dbg!(c);
-
-        let res: Vec3 = TryFrom::try_from(rot * v * a.inverse() * b.inverse()).unwrap();
+        dbg!(&c);
+        dbg!(&res);
 
         assert!(res.is_close(c));
     }
